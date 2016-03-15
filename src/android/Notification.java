@@ -34,10 +34,18 @@ import android.content.DialogInterface;
 import android.media.Ringtone;
 import android.media.RingtoneManager;
 import android.net.Uri;
-import android.text.InputType;
-import android.text.method.PasswordTransformationMethod;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.CheckBox;
+
+import android.widget.CompoundButton;
+import android.widget.CompoundButton.OnCheckedChangeListener;
+
+import android.view.View;
+
+import android.R;
+
+import java.util.*;
 
 
 /**
@@ -88,8 +96,12 @@ public class Notification extends CordovaPlugin {
             this.confirm(args.getString(0), args.getString(1), args.getJSONArray(2), callbackContext);
             return true;
         }
+        else if (action.equals("confirmCheckbox")) {
+            this.confirmCheckbox(args.getString(0), args.getString(1), args.getJSONArray(2), args.getString(3), callbackContext);
+            return true;
+        }
         else if (action.equals("prompt")) {
-            this.prompt(args.getString(0), args.getString(1), args.getJSONArray(2), args.getString(3), args.getInt(4), callbackContext);
+            this.prompt(args.getString(0), args.getString(1), args.getJSONArray(2), args.getString(3), callbackContext);
             return true;
         }
         else if (action.equals("activityStart")) {
@@ -260,6 +272,107 @@ public class Notification extends CordovaPlugin {
     }
 
     /**
+     * Builds and shows a native Android confirm dialog with given title, message, buttons.
+     * This dialog only shows up to 3 buttons.  Any labels after that will be ignored.
+     * The index of the button pressed will be returned to the JavaScript callback identified by callbackId.
+     *
+     * @param message           The message the dialog should display
+     * @param title             The title of the dialog
+     * @param buttonLabels      A comma separated list of button labels (Up to 3 buttons)
+     * @param callbackContext   The callback context.
+     */
+    public synchronized void confirmCheckbox(final String message, final String title, final JSONArray buttonLabels, final String checkboxmessage, final CallbackContext callbackContext) {
+    	final CordovaInterface cordova = this.cordova;
+
+      Runnable runnable = new Runnable() {
+        public void run() {
+
+          final JSONObject result = new JSONObject();
+
+          final CheckBox checkBox = new CheckBox(cordova.getActivity());
+          checkBox.setChecked(false);
+          try {
+            result.put("result",false);
+          } catch (JSONException e) { e.printStackTrace(); }
+          checkBox.setOnCheckedChangeListener(new OnCheckedChangeListener() {
+              @Override
+              public void onCheckedChanged(CompoundButton buttonView,boolean isChecked) {
+                try {
+                  result.put("result", isChecked);
+                } catch (JSONException e) { e.printStackTrace(); }
+              }
+          });
+          checkBox.setText(checkboxmessage);
+
+          AlertDialog.Builder dlg = createDialog(cordova); // new AlertDialog.Builder(cordova.getActivity(), AlertDialog.THEME_DEVICE_DEFAULT_LIGHT);
+          dlg.setMessage(message);
+          dlg.setTitle(title);
+          dlg.setView(checkBox);
+          dlg.setCancelable(false);
+
+            // First button
+            if (buttonLabels.length() > 0) {
+              try {
+                dlg.setNegativeButton(buttonLabels.getString(0),
+                new AlertDialog.OnClickListener() {
+                  public void onClick(DialogInterface dialog, int which) {
+                    dialog.dismiss();
+                    try {
+                      result.put("buttonIndex", 1);
+                    } catch (JSONException e) { e.printStackTrace(); }
+                    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, result));
+                  }
+                });
+              } catch (JSONException e) { }
+            }
+
+            // Second button
+            if (buttonLabels.length() > 1) {
+              try {
+                dlg.setNeutralButton(buttonLabels.getString(1),
+                new AlertDialog.OnClickListener() {
+                  public void onClick(DialogInterface dialog, int which) {
+                    dialog.dismiss();
+                    try {
+                      result.put("buttonIndex", 2);
+                    } catch (JSONException e) { e.printStackTrace(); }
+                    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, result));
+                  }
+                });
+              } catch (JSONException e) { }
+            }
+
+            // Third button
+            if (buttonLabels.length() > 2) {
+              try {
+                dlg.setPositiveButton(buttonLabels.getString(2),
+                new AlertDialog.OnClickListener() {
+                  public void onClick(DialogInterface dialog, int which) {
+                    dialog.dismiss();
+                    try {
+                      result.put("buttonIndex", 3);
+                    } catch (JSONException e) { e.printStackTrace(); }
+                    callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, result));
+                  }
+                });
+              } catch (JSONException e) { }
+            }
+            dlg.setOnCancelListener(new AlertDialog.OnCancelListener() {
+              public void onCancel(DialogInterface dialog) {
+                dialog.dismiss();
+                try {
+                  result.put("buttonIndex", 0);
+                } catch (JSONException e) { e.printStackTrace(); }
+                callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, result));
+              }
+            });
+            changeTextDirection(dlg);
+          };
+        };
+        this.cordova.getActivity().runOnUiThread(runnable);
+    }
+
+    /**
      * Builds and shows a native Android prompt dialog with given title, message, buttons.
      * This dialog only shows up to 3 buttons.  Any labels after that will be ignored.
      * The following results are returned to the JavaScript callback identified by callbackId:
@@ -271,7 +384,7 @@ public class Notification extends CordovaPlugin {
      * @param buttonLabels      A comma separated list of button labels (Up to 3 buttons)
      * @param callbackContext   The callback context.
      */
-    public synchronized void prompt(final String message, final String title, final JSONArray buttonLabels, final String defaultText, final int inputype ,final CallbackContext callbackContext) {
+    public synchronized void prompt(final String message, final String title, final JSONArray buttonLabels, final String defaultText, final CallbackContext callbackContext) {
 
         final CordovaInterface cordova = this.cordova;
 
@@ -348,28 +461,6 @@ public class Notification extends CordovaPlugin {
                         callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, result));
                     }
                 });
-
-                switch (inputype) {
-                        case 2:
-                            promptInput.setInputType(InputType.TYPE_CLASS_NUMBER);
-                            break;
-                        case 4:
-                            promptInput.setInputType(InputType.TYPE_CLASS_TEXT);
-                            break;
-                        case 5:
-                            promptInput.setInputType(InputType.TYPE_CLASS_NUMBER
-                                    | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-                            promptInput.setTransformationMethod(PasswordTransformationMethod.getInstance());
-                            break;
-                        case 6:
-                            promptInput.setInputType(InputType.TYPE_CLASS_TEXT
-                                    | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-                            promptInput.setTransformationMethod(PasswordTransformationMethod.getInstance());
-                            break;
-                        default:
-                                promptInput.setInputType(InputType.TYPE_CLASS_TEXT);
-                                break;
-                            }
 
                 changeTextDirection(dlg);
             };
@@ -501,6 +592,7 @@ public class Notification extends CordovaPlugin {
             return new ProgressDialog(cordova.getActivity());
         }
     }
+
 
     @SuppressLint("NewApi")
     private void changeTextDirection(Builder dlg){
